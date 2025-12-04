@@ -1,0 +1,7 @@
+{
+  "name": "Copy of Copy of حكايات (Hakayat)",
+  "description": "تطبيق لإنشاء قصص تفاعلية ومصورة باستخدام الذكاء الاصطناعي. (Interactive Story Creator powered by AI)",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
