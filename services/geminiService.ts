@@ -1,23 +1,6 @@
 import { GoogleGenAI, Type, Schema, Modality } from "@google/genai";
 import { GeneratedStory, StoryParams, AgeGroup, StoryLength, Genre } from "../types";
 
-// Helper to safely get the API key in Vite/Vercel environment
-const getApiKey = () => {
-  // In Vite/Vercel, we MUST use import.meta.env.VITE_API_KEY
-  // Accessing 'process' directly in the browser often causes a "ReferenceError" crash
-  // @ts-ignore
-  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
-    // @ts-ignore
-    return import.meta.env.VITE_API_KEY;
-  }
-  return "";
-};
-
-const apiKey = getApiKey();
-
-// Initialize the client
-const ai = new GoogleGenAI({ apiKey: apiKey });
-
 const storySchema: Schema = {
   type: Type.OBJECT,
   properties: {
@@ -31,10 +14,12 @@ const storySchema: Schema = {
 };
 
 export const generateStory = async (params: StoryParams): Promise<GeneratedStory> => {
+  const apiKey = process.env.API_KEY;
   if (!apiKey) {
-    throw new Error("مفتاح API غير موجود. تأكد من إضافة المتغير VITE_API_KEY في إعدادات Vercel.");
+    throw new Error("مفتاح API مفقود. يرجى التأكد من إعداد البيئة بشكل صحيح.");
   }
 
+  const ai = new GoogleGenAI({ apiKey: apiKey });
   const modelId = "gemini-2.5-flash"; 
   
   // Determine length instruction
@@ -96,17 +81,17 @@ export const generateStory = async (params: StoryParams): Promise<GeneratedStory
     const storyData = JSON.parse(text) as GeneratedStory;
     return storyData;
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Story generation failed:", error);
-    throw new Error("عذراً، حدث خطأ أثناء تأليف القصة. حاول مرة أخرى.");
+    throw new Error("عذراً، حدث خطأ أثناء تأليف القصة. تأكد من صحة المفتاح.");
   }
 };
 
 export const generateStoryImage = async (imagePrompt: string): Promise<string> => {
-  if (!apiKey) {
-     throw new Error("Missing API Key");
-  }
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API Key missing");
 
+  const ai = new GoogleGenAI({ apiKey: apiKey });
   const modelId = "gemini-2.5-flash-image"; 
 
   try {
@@ -129,17 +114,17 @@ export const generateStoryImage = async (imagePrompt: string): Promise<string> =
     
     throw new Error("No image data returned.");
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Image generation failed:", error);
     throw new Error("عذراً، لم نتمكن من رسم المشهد حالياً.");
   }
 };
 
 export const generateSpeech = async (text: string, voiceName: string = 'Puck'): Promise<string> => {
-    if (!apiKey) {
-        throw new Error("Missing API Key");
-    }
-
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) throw new Error("API Key missing");
+    
+    const ai = new GoogleGenAI({ apiKey: apiKey });
     const modelId = "gemini-2.5-flash-preview-tts";
     
     try {

@@ -17,7 +17,7 @@ const App: React.FC = () => {
   // Track context of the current story
   const [currentStoryId, setCurrentStoryId] = useState<string | null>(null);
   const [bookmarks, setBookmarks] = useState<number[]>([]);
-
+  
   const [state, setState] = useState<StoryState>({
     isLoading: false,
     error: null,
@@ -26,36 +26,40 @@ const App: React.FC = () => {
     isGeneratingImage: false,
   });
 
-  // Load saved stories and theme on mount
+  // Load saved stories, theme on mount
   useEffect(() => {
-    const storedStories = localStorage.getItem(STORAGE_KEY);
-    if (storedStories) {
-      try {
-        setSavedStories(JSON.parse(storedStories));
-      } catch (e) {
-        console.error("Failed to parse saved stories", e);
-      }
-    }
+    try {
+        const storedStories = localStorage.getItem(STORAGE_KEY);
+        if (storedStories) {
+            setSavedStories(JSON.parse(storedStories));
+        }
 
-    const storedTheme = localStorage.getItem(THEME_KEY);
-    if (storedTheme === 'dark') {
-      setDarkMode(true);
-      document.documentElement.classList.add('dark');
-    } else {
-      setDarkMode(false);
-      document.documentElement.classList.remove('dark');
+        const storedTheme = localStorage.getItem(THEME_KEY);
+        if (storedTheme === 'dark') {
+            setDarkMode(true);
+            document.documentElement.classList.add('dark');
+        } else {
+            setDarkMode(false);
+            document.documentElement.classList.remove('dark');
+        }
+    } catch (e) {
+        console.error("Failed to access localStorage", e);
     }
   }, []);
 
   const toggleDarkMode = () => {
     const newMode = !darkMode;
     setDarkMode(newMode);
-    if (newMode) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem(THEME_KEY, 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem(THEME_KEY, 'light');
+    try {
+        if (newMode) {
+            document.documentElement.classList.add('dark');
+            localStorage.setItem(THEME_KEY, 'dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+            localStorage.setItem(THEME_KEY, 'light');
+        }
+    } catch (e) {
+        console.error("Failed to save theme preference", e);
     }
   };
 
@@ -82,7 +86,7 @@ const App: React.FC = () => {
 
   const handleGenerateImage = async () => {
     if (!state.data?.imagePrompt) return;
-
+    
     setState(prev => ({ ...prev, isGeneratingImage: true }));
     try {
       const imageBase64 = await generateStoryImage(state.data.imagePrompt + ", storybook illustration style, high quality, warm lighting, digital art, detailed");
@@ -94,11 +98,15 @@ const App: React.FC = () => {
       
       // If story is already saved, update the image in storage immediately
       if (currentStoryId) {
-        const updatedStories = savedStories.map(s => 
-            s.id === currentStoryId ? { ...s, imageSrc: imageBase64 } : s
-        );
-        setSavedStories(updatedStories);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedStories));
+        try {
+            const updatedStories = savedStories.map(s => 
+                s.id === currentStoryId ? { ...s, imageSrc: imageBase64 } : s
+            );
+            setSavedStories(updatedStories);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedStories));
+        } catch (e) {
+            console.error("Failed to save image update", e);
+        }
       }
 
     } catch (err: any) {
@@ -124,49 +132,57 @@ const App: React.FC = () => {
   const handleSaveStory = () => {
     if (!state.data) return;
 
-    // Check if already saved by ID
-    if (currentStoryId) {
-        // Update existing
-        const updatedStories = savedStories.map(s => 
-            s.id === currentStoryId ? { ...s, bookmarks: bookmarks, imageSrc: state.generatedImage } : s
+    try {
+        // Check if already saved by ID
+        if (currentStoryId) {
+            // Update existing
+            const updatedStories = savedStories.map(s => 
+                s.id === currentStoryId ? { ...s, bookmarks: bookmarks, imageSrc: state.generatedImage } : s
+            );
+            setSavedStories(updatedStories);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedStories));
+            alert("تم تحديث القصة المحفوظة!");
+            return;
+        }
+
+        // Check if duplicate content (fallback check)
+        const isDuplicate = savedStories.some(
+            s => s.story.title === state.data?.title && s.story.content.length === state.data?.content.length
         );
+
+        if (isDuplicate) {
+            alert("هذه القصة محفوظة مسبقاً في مكتبتك.");
+            return;
+        }
+
+        const newId = Date.now().toString();
+        const newStory: SavedStory = {
+            id: newId,
+            createdAt: Date.now(),
+            story: state.data,
+            imageSrc: state.generatedImage,
+            bookmarks: bookmarks
+        };
+
+        const updatedStories = [newStory, ...savedStories];
         setSavedStories(updatedStories);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedStories));
-        alert("تم تحديث القصة المحفوظة!");
-        return;
+        setCurrentStoryId(newId);
+        alert("تم حفظ القصة في مكتبتك بنجاح!");
+    } catch (e) {
+        alert("عذراً، مساحة التخزين في المتصفح ممتلئة أو غير متاحة.");
     }
-
-    // Check if duplicate content (fallback check)
-    const isDuplicate = savedStories.some(
-        s => s.story.title === state.data?.title && s.story.content.length === state.data?.content.length
-    );
-
-    if (isDuplicate) {
-        alert("هذه القصة محفوظة مسبقاً في مكتبتك.");
-        return;
-    }
-
-    const newId = Date.now().toString();
-    const newStory: SavedStory = {
-      id: newId,
-      createdAt: Date.now(),
-      story: state.data,
-      imageSrc: state.generatedImage,
-      bookmarks: bookmarks
-    };
-
-    const updatedStories = [newStory, ...savedStories];
-    setSavedStories(updatedStories);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedStories));
-    setCurrentStoryId(newId);
-    alert("تم حفظ القصة في مكتبتك بنجاح!");
   };
 
   const handleDeleteStory = (id: string) => {
     if (window.confirm("هل أنت متأكد من حذف هذه القصة؟")) {
         const updatedStories = savedStories.filter(s => s.id !== id);
         setSavedStories(updatedStories);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedStories));
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedStories));
+        } catch (e) {
+            console.error("Failed to save after delete", e);
+        }
         
         if (currentStoryId === id) {
             handleReset();
@@ -196,11 +212,15 @@ const App: React.FC = () => {
 
     // Persist immediately if story is already saved
     if (currentStoryId) {
-        const updatedStories = savedStories.map(s => 
-            s.id === currentStoryId ? { ...s, bookmarks: newBookmarks } : s
-        );
-        setSavedStories(updatedStories);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedStories));
+        try {
+            const updatedStories = savedStories.map(s => 
+                s.id === currentStoryId ? { ...s, bookmarks: newBookmarks } : s
+            );
+            setSavedStories(updatedStories);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedStories));
+        } catch (e) {
+            console.error("Failed to save bookmarks", e);
+        }
     }
   };
 

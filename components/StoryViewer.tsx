@@ -264,9 +264,11 @@ const StoryViewer: React.FC<StoryViewerProps> = ({
   };
 
   const handleShare = async () => {
-    const textToShare = `${story.title}\n\n${story.summary}\n\n${story.content}\n\n✨ تم تأليف هذه القصة عبر تطبيق حكايات`.trim();
+    const appUrl = window.location.href; // Get current App URL
+    const textToShare = `${story.title}\n\n${story.summary}\n\n${story.content}\n\n✨ تم تأليف هذه القصة عبر تطبيق حكايات:\n${appUrl}`.trim();
+    
     if (navigator.share) {
-        try { await navigator.share({ title: story.title, text: textToShare }); } catch (error) { console.log('Error sharing:', error); }
+        try { await navigator.share({ title: story.title, text: textToShare, url: appUrl }); } catch (error) { console.log('Error sharing:', error); }
     } else {
         try {
             await navigator.clipboard.writeText(textToShare);
@@ -396,8 +398,21 @@ const StoryViewer: React.FC<StoryViewerProps> = ({
                 </div>
                 <div className="mb-8">
                     {imageSrc ? (
-                    <div className="relative group rounded-2xl overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-500 ease-out max-w-xl mx-auto border-4 border-white/50 dark:border-stone-600/20">
-                        <img src={imageSrc} alt={story.title} className="w-full h-auto object-cover" />
+                    <div className={`relative group mx-auto max-w-xl transition-all duration-500 ease-out hover:-translate-y-1
+                        ${readingTheme === 'sepia' 
+                            ? 'p-3 bg-[#EAE0C9] shadow-[0_15px_30px_rgba(67,52,34,0.2)] ring-1 ring-[#8B5E3C]/20' 
+                            : 'p-3 bg-white dark:bg-stone-800 shadow-[0_20px_40px_rgba(0,0,0,0.2)] dark:shadow-black/50 ring-1 ring-stone-900/5 dark:ring-white/10'
+                        } rounded-xl`}>
+                        <div className="relative overflow-hidden rounded-lg">
+                             <img 
+                                src={imageSrc} 
+                                alt={story.title} 
+                                className="w-full h-auto object-cover transform transition-transform duration-1000 ease-in-out group-hover:scale-105" 
+                            />
+                             {/* Subtle inner shadow overlay and sheen */}
+                             <div className="absolute inset-0 shadow-[inset_0_0_20px_rgba(0,0,0,0.1)] pointer-events-none rounded-lg"></div>
+                             <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"></div>
+                        </div>
                     </div>
                     ) : (
                     <div className="w-full max-w-md mx-auto aspect-video rounded-3xl border-2 border-dashed border-stone-300 dark:border-stone-700 bg-stone-50/50 dark:bg-stone-900/30 flex flex-col items-center justify-center p-8 gap-5 text-center transition-colors group">
