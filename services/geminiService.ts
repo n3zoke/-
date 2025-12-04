@@ -14,9 +14,11 @@ const storySchema: Schema = {
 };
 
 export const generateStory = async (params: StoryParams): Promise<GeneratedStory> => {
+  // Use process.env.API_KEY exclusively as per guidelines
   const apiKey = process.env.API_KEY;
+  
   if (!apiKey) {
-    throw new Error("مفتاح API مفقود. يرجى التأكد من إعداد البيئة بشكل صحيح.");
+    throw new Error("مفتاح API مفقود. يرجى التأكد من إضافة process.env.API_KEY.");
   }
 
   const ai = new GoogleGenAI({ apiKey: apiKey });
