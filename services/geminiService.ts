@@ -1,9 +1,24 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { GoogleGenAI, Type, Schema, Modality } from "@google/genai";
 import { GeneratedStory, StoryParams, AgeGroup, StoryLength, Genre } from "../types";
 
-// Initialize the client
-// CRITICAL: process.env.API_KEY is guaranteed to be available.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Helper to safely get the API key in Vite environment
+const getApiKey = () => {
+  // @ts-ignore
+  if (import.meta.env && import.meta.env.VITE_API_KEY) {
+    // @ts-ignore
+    return import.meta.env.VITE_API_KEY;
+  }
+  // Fallback for local development if process is defined
+  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+    return process.env.API_KEY;
+  }
+  return "";
+};
+
+const apiKey = getApiKey();
+
+// Initialize the client only if key exists, otherwise we'll throw explicit errors later
+const ai = new GoogleGenAI({ apiKey: apiKey });
 
 const storySchema: Schema = {
   type: Type.OBJECT,
@@ -18,6 +33,10 @@ const storySchema: Schema = {
 };
 
 export const generateStory = async (params: StoryParams): Promise<GeneratedStory> => {
+  if (!apiKey) {
+    throw new Error("مفتاح API غير موجود. تأكد من إعداد VITE_API_KEY في Vercel.");
+  }
+
   const modelId = "gemini-2.5-flash"; // Fast and capable for text
   
   // Determine length instruction
@@ -56,7 +75,7 @@ export const generateStory = async (params: StoryParams): Promise<GeneratedStory
     2. The story should be culturally appropriate, engaging, and well-structured.
     3. Provide the output strictly in JSON format matching the schema.
     4. IMPORTANT: The 'imagePrompt' field MUST be in English to ensure better compatibility with image generation models. The rest of the fields MUST be in Arabic.
-    5. For longer stories, use proper formatting with clear transitions or chapter breaks (though returned as a single string).
+    5. For longer stories, MUST ensure the content is very long as requested. Use clear double line breaks between paragraphs.
   `;
 
   try {
@@ -87,6 +106,10 @@ export const generateStory = async (params: StoryParams): Promise<GeneratedStory
 };
 
 export const generateStoryImage = async (imagePrompt: string): Promise<string> => {
+  if (!apiKey) {
+     throw new Error("Missing API Key");
+  }
+
   const modelId = "gemini-2.5-flash-image"; 
 
   try {
@@ -116,11 +139,13 @@ export const generateStoryImage = async (imagePrompt: string): Promise<string> =
 };
 
 export const generateSpeech = async (text: string, voiceName: string = 'Puck'): Promise<string> => {
+    if (!apiKey) {
+        throw new Error("Missing API Key");
+    }
+
     const modelId = "gemini-2.5-flash-preview-tts";
     
     try {
-        // Truncate text slightly if strictly needed, though chunking handles most cases.
-        // Google TTS usually handles decent length, but let's be safe against empty.
         if (!text || text.trim().length === 0) {
             throw new Error("Empty text provided");
         }
@@ -131,7 +156,7 @@ export const generateSpeech = async (text: string, voiceName: string = 'Puck'): 
                 parts: [{ text: text }]
             },
             config: {
-                responseModalities: ["AUDIO"],
+                responseModalities: [Modality.AUDIO],
                 speechConfig: {
                     voiceConfig: {
                         prebuiltVoiceConfig: { voiceName: voiceName }
@@ -140,7 +165,6 @@ export const generateSpeech = async (text: string, voiceName: string = 'Puck'): 
             }
         });
 
-        // Extract audio data
         const audioData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
         if (!audioData) {
             throw new Error("No audio data returned");
