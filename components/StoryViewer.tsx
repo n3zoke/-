@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GeneratedStory } from '../types';
-import { Image as ImageIcon, ArrowRight, Sparkles, Wand2, Save, Type, Bookmark, Volume2, Square, Share2, Check, Settings2, Palette, Monitor, BookOpen, Maximize, Minimize, Mic, Wifi, Smartphone, Pause, AlertCircle } from 'lucide-react';
+import { Image as ImageIcon, ArrowRight, Sparkles, Wand2, Save, Type, Bookmark, Volume2, Square, Share2, Check, Settings2, Palette, Monitor, BookOpen, Maximize, Minimize, Mic, Wifi, Smartphone, Pause, AlertCircle, VolumeX } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { generateSpeech } from '../services/geminiService';
 
@@ -57,6 +57,7 @@ const StoryViewer: React.FC<StoryViewerProps> = ({
   const [currentChunkIndex, setCurrentChunkIndex] = useState(0);
   const [activeParagraphIndex, setActiveParagraphIndex] = useState<number | null>(null);
   const [ttsError, setTtsError] = useState<string | null>(null);
+  const [isSystemFallback, setIsSystemFallback] = useState(false);
   
   // Audio Refs
   const synthRef = useRef<SpeechSynthesis | null>(null);
@@ -74,11 +75,14 @@ const StoryViewer: React.FC<StoryViewerProps> = ({
         synthRef.current = window.speechSynthesis;
         const loadVoices = () => {
             const allVoices = window.speechSynthesis.getVoices();
-            const arVoices = allVoices.filter(voice => voice.lang.toLowerCase().startsWith('ar'));
+            const arVoices = allVoices.filter(voice => voice.lang.toLowerCase().includes('ar'));
             setArabicVoices(arVoices);
         };
         loadVoices();
-        window.speechSynthesis.onvoiceschanged = loadVoices;
+        // Some browsers load voices asynchronously
+        if (window.speechSynthesis.onvoiceschanged !== undefined) {
+             window.speechSynthesis.onvoiceschanged = loadVoices;
+        }
     }
     
     // Web Audio API Setup for AI Voices
@@ -164,8 +168,17 @@ const StoryViewer: React.FC<StoryViewerProps> = ({
   };
 
   const playSystemVoice = (text: string, startIndex: number) => {
+        if (!synthRef.current) return;
+        
+        // Cancel any pending speech
+        synthRef.current.cancel();
+
         const utterance = new SpeechSynthesisUtterance(text);
-        const sysVoice = arabicVoices.find(v => v.name === selectedVoiceName) || arabicVoices[0];
+        
+        // Try to find selected voice, else fallback to first Arabic, else any voice
+        let sysVoice = arabicVoices.find(v => v.name === selectedVoiceName);
+        if (!sysVoice && arabicVoices.length > 0) sysVoice = arabicVoices[0];
+        
         if (sysVoice) utterance.voice = sysVoice;
         utterance.lang = 'ar-SA';
         utterance.rate = speechRate;
@@ -177,14 +190,22 @@ const StoryViewer: React.FC<StoryViewerProps> = ({
         };
 
         utterance.onerror = (e) => {
-            console.error("Browser TTS Error", e);
-            if (e.error !== 'canceled' && e.error !== 'interrupted') {
-                // Skip to next if error
-                if (isPlayingRef.current) playNextChunk(startIndex + 1);
+            console.warn("Browser TTS Event:", e.error);
+            // 'interrupted' or 'canceled' happens when we stop manually, ignore it.
+            if (e.error === 'interrupted' || e.error === 'canceled') {
+                return;
+            }
+            // If it's a real error, try skipping to next chunk
+            if (isPlayingRef.current) {
+                console.log("Skipping chunk due to error");
+                playNextChunk(startIndex + 1);
             }
         };
 
-        synthRef.current?.speak(utterance);
+        // Small timeout to ensure browser is ready
+        setTimeout(() => {
+            if(isPlayingRef.current) synthRef.current?.speak(utterance);
+        }, 10);
   };
 
   const playNextChunk = async (startIndex: number) => {
@@ -206,7 +227,8 @@ const StoryViewer: React.FC<StoryViewerProps> = ({
       }
 
       // Check if selected voice is AI or System
-      const isAiVoice = AI_VOICES.some(v => v.name === selectedVoiceName);
+      // If we are already in fallback mode, force system voice
+      const isAiVoice = !isSystemFallback && AI_VOICES.some(v => v.name === selectedVoiceName);
 
       if (isAiVoice) {
           try {
@@ -249,18 +271,15 @@ const StoryViewer: React.FC<StoryViewerProps> = ({
               source.start(0);
 
           } catch (error) {
-              console.error("AI TTS Error", error);
+              console.error("AI TTS Failed, switching to system voice:", error);
               setIsBuffering(false);
-              setTtsError("تعذر الاتصال بالصوت الذكي، جاري التحويل لصوت الجهاز...");
+              
+              // Switch to system fallback mode silently and immediately
+              setIsSystemFallback(true);
+              setTtsError("جاري استخدام صوت الجهاز (تعذر الاتصال بالخادم)");
               
               // Fallback to System Voice immediately
-              setTimeout(() => {
-                  setTtsError(null);
-                  // Ensure we are still playing before falling back
-                  if (isPlayingRef.current) {
-                      playSystemVoice(chunk.text, startIndex);
-                  }
-              }, 1500);
+              playSystemVoice(chunk.text, startIndex);
           }
 
       } else {
@@ -273,6 +292,12 @@ const StoryViewer: React.FC<StoryViewerProps> = ({
     if (isPlaying) {
         stopAllAudio();
     } else {
+        // Reset fallback state on new play session if user selected an AI voice
+        if (AI_VOICES.some(v => v.name === selectedVoiceName)) {
+            setIsSystemFallback(false);
+            setTtsError(null);
+        }
+        
         isPlayingRef.current = true;
         setIsPlaying(true);
         playNextChunk(currentChunkIndex); 
@@ -285,14 +310,19 @@ const StoryViewer: React.FC<StoryViewerProps> = ({
       stopAllAudio();
       
       // Update State
-      if (newVoiceName) setSelectedVoiceName(newVoiceName);
+      if (newVoiceName) {
+          setSelectedVoiceName(newVoiceName);
+          // If user manually changes voice, try to reset fallback to allow retrying AI
+          if (AI_VOICES.some(v => v.name === newVoiceName)) {
+              setIsSystemFallback(false);
+              setTtsError(null);
+          }
+      }
       if (newRate) setSpeechRate(newRate);
       
       // Restart if needed
       if (wasPlaying) {
-          // Small delay to ensure clean stop
           setTimeout(() => {
-              // Note: using local vars for the restart to avoid state update lag
               isPlayingRef.current = true;
               setIsPlaying(true);
               playNextChunk(currentChunkIndex);
@@ -449,11 +479,11 @@ ${story.moral ? `💡 العبرة: ${story.moral}` : ''}
                 )}
               </div>
 
-              {/* TTS Error Toast */}
+              {/* TTS Error / Fallback Info Toast */}
               {ttsError && (
-                 <div className="mt-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 text-amber-800 dark:text-amber-200 px-4 py-2 rounded-xl text-sm flex items-center gap-2 animate-fade-in shadow-lg">
-                    <AlertCircle className="w-4 h-4" />
-                    {ttsError}
+                 <div className="mt-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 text-amber-800 dark:text-amber-200 px-4 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2 animate-fade-in shadow-lg">
+                    <VolumeX className="w-4 h-4 shrink-0" />
+                    <span>{ttsError}</span>
                  </div>
               )}
 

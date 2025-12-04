@@ -119,6 +119,12 @@ export const generateSpeech = async (text: string, voiceName: string = 'Puck'): 
     const modelId = "gemini-2.5-flash-preview-tts";
     
     try {
+        // Truncate text slightly if strictly needed, though chunking handles most cases.
+        // Google TTS usually handles decent length, but let's be safe against empty.
+        if (!text || text.trim().length === 0) {
+            throw new Error("Empty text provided");
+        }
+
         const response = await ai.models.generateContent({
             model: modelId,
             contents: {
@@ -141,8 +147,8 @@ export const generateSpeech = async (text: string, voiceName: string = 'Puck'): 
         }
         return audioData;
 
-    } catch (error) {
-        console.error("Speech generation failed:", error);
+    } catch (error: any) {
+        console.error("Speech generation failed:", error.message || error);
         throw new Error("عذراً، تعذر توليد الصوت.");
     }
 };
