@@ -1,23 +1,21 @@
 import { GoogleGenAI, Type, Schema, Modality } from "@google/genai";
 import { GeneratedStory, StoryParams, AgeGroup, StoryLength, Genre } from "../types";
 
-// Helper to safely get the API key in Vite environment
+// Helper to safely get the API key in Vite/Vercel environment
 const getApiKey = () => {
+  // In Vite/Vercel, we MUST use import.meta.env.VITE_API_KEY
+  // Accessing 'process' directly in the browser often causes a "ReferenceError" crash
   // @ts-ignore
-  if (import.meta.env && import.meta.env.VITE_API_KEY) {
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
     // @ts-ignore
     return import.meta.env.VITE_API_KEY;
-  }
-  // Fallback for local development if process is defined
-  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-    return process.env.API_KEY;
   }
   return "";
 };
 
 const apiKey = getApiKey();
 
-// Initialize the client only if key exists, otherwise we'll throw explicit errors later
+// Initialize the client
 const ai = new GoogleGenAI({ apiKey: apiKey });
 
 const storySchema: Schema = {
@@ -34,10 +32,10 @@ const storySchema: Schema = {
 
 export const generateStory = async (params: StoryParams): Promise<GeneratedStory> => {
   if (!apiKey) {
-    throw new Error("مفتاح API غير موجود. تأكد من إعداد VITE_API_KEY في Vercel.");
+    throw new Error("مفتاح API غير موجود. تأكد من إضافة المتغير VITE_API_KEY في إعدادات Vercel.");
   }
 
-  const modelId = "gemini-2.5-flash"; // Fast and capable for text
+  const modelId = "gemini-2.5-flash"; 
   
   // Determine length instruction
   let lengthInstruction = "Make it a detailed story (approx 1000 words).";
@@ -86,7 +84,7 @@ export const generateStory = async (params: StoryParams): Promise<GeneratedStory
         responseMimeType: "application/json",
         responseSchema: storySchema,
         systemInstruction: "You are a professional Arab storyteller (Hakawati) and novelist. You write captivating stories with rich vocabulary appropriate for the target age and selected genre.",
-        temperature: params.ageGroup === AgeGroup.ADULT ? 1.0 : 0.8, // Max creativity for adults
+        temperature: params.ageGroup === AgeGroup.ADULT ? 1.0 : 0.8,
       },
     });
 
@@ -95,7 +93,6 @@ export const generateStory = async (params: StoryParams): Promise<GeneratedStory
       throw new Error("No content generated.");
     }
     
-    // Parse the JSON response
     const storyData = JSON.parse(text) as GeneratedStory;
     return storyData;
 
